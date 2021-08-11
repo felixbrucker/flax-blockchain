@@ -39,6 +39,15 @@ jobs:
     - name: Cleanup any leftovers that exist from previous runs
       run: bash build_scripts/clean-runner.sh || true
 
+    - name: Create installer version number
+      id: version_number
+      run: |
+        python3 -m venv ../venv
+        . ../venv/bin/activate
+        pip install setuptools_scm
+        echo "::set-output name=FLAX_INSTALLER_VERSION::$(python3 ./build_scripts/installer-version.py)"
+        deactivate
+
     - name: Setup Python environment
       uses: actions/setup-python@v3
       with:
