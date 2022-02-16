@@ -39,7 +39,7 @@ cd flax-blockchain-gui || exit
 
 echo "npm build"
 npm install
-npm audit fix
+#npm audit fix
 npm run build
 LAST_EXIT_CODE=$?
 if [ "$LAST_EXIT_CODE" -ne 0 ]; then

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from typing import Callable, Optional, List, Any, Dict, Tuple
@@ -593,6 +594,9 @@ class FarmerAPI:
         submit_partial_response: Dict
         try:
             submit_partial_response = await self.farmer.pool_api_client.submit_partial(submit_partial)
+        except asyncio.TimeoutError:
+            self.farmer.log.error(f"Timed out while submitting partial to OG pool")
+            return
         except Exception as e:
             self.farmer.log.error(f"Error submitting partial to OG pool: {e}")
             return

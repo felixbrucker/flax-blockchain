@@ -66,6 +66,8 @@ UPDATE_POOL_INFO_INTERVAL: int = 3600
 UPDATE_POOL_FARMER_INFO_INTERVAL: int = 300
 UPDATE_HARVESTER_CACHE_INTERVAL: int = 90
 
+DEFAULT_OG_POOL_URL: str = "https://farmer.flax-og.foxypool.io"
+
 """
 HARVESTER PROTOCOL (FARMER <-> HARVESTER)
 """
@@ -188,8 +190,9 @@ class Farmer:
         self.harvester_cache: Dict[str, Dict[str, HarvesterCacheEntry]] = {}
 
         # OG Pooling setup
-        self.pool_url = self.config.get("pool_url")
-        self.pool_payout_address = self.config.get("pool_payout_address")
+        self.pool_url = self.config.get("pool_url", DEFAULT_OG_POOL_URL)
+        self.pool_payout_address = self.config.get("pool_payout_address", self.farmer_target_encoded)
+        self.is_og_pooling_disabled = self.config.get("disable_og_pooling", False)
         self.pool_sub_slot_iters = constants.get("POOL_SUB_SLOT_ITERS")
         self.iters_limit = calculate_sp_interval_iters(self.constants, self.pool_sub_slot_iters)
         self.pool_minimum_difficulty: uint64 = uint64(1)
@@ -200,14 +203,14 @@ class Farmer:
         self.check_pool_reward_target_task: Optional[asyncio.Task] = None
 
     def is_pooling_enabled(self):
-        return self.pool_url is not None and self.pool_payout_address is not None
+        return self.pool_url is not None and self.pool_payout_address is not None and not self.is_og_pooling_disabled
 
     async def _start(self):
         await self.setup_keys()
         self.update_pool_state_task = asyncio.create_task(self._periodically_update_pool_state_task())
         self.cache_clear_task = asyncio.create_task(self._periodically_clear_cache_and_refresh_task())
         if not self.is_pooling_enabled():
-            self.log.info(f"Not OG pooling as 'pool_payout_address' and/or 'pool_url' are missing in your config")
+            self.log.info(f"Not OG pooling as 'disable_og_pooling' is set to true in your config")
             return
         self.pool_api_client = PoolApiClient(self.pool_url)
         await self.initialize_pooling()
@@ -215,18 +218,22 @@ class Farmer:
         self.check_pool_reward_target_task = asyncio.create_task(self._periodically_check_pool_reward_target_task())
 
     async def initialize_pooling(self):
+        self.log.debug(f"Connecting to OG pool {self.pool_url} ..")
         pool_info: Dict = {}
         has_pool_info = False
         while not has_pool_info:
             try:
                 pool_info = await self.pool_api_client.get_pool_info()
                 has_pool_info = True
+            except asyncio.TimeoutError:
+                self.log.error(f"Timed out while retrieving OG pool info")
+                await sleep(5)
             except Exception as e:
                 self.log.error(f"Error retrieving OG pool info: {e}")
                 await sleep(5)
 
         pool_name = pool_info["name"]
-        self.log.info(f"Connected to OG pool {pool_name}")
+        self.log.info(f"Connected to OG pool {pool_name} ({self.pool_url}) using payout address {self.pool_payout_address}")
         self.pool_var_diff_target_in_seconds = pool_info["var_diff_target_in_seconds"]
 
         self.pool_minimum_difficulty = uint64(pool_info["minimum_difficulty"])
@@ -592,6 +599,7 @@ class Farmer:
             self.farmer_target_encoded = farmer_target_encoded
             self.farmer_target = decode_puzzle_hash(farmer_target_encoded)
             config["farmer"]["xfx_target_address"] = farmer_target_encoded
+            self.pool_payout_address = self.config.get("pool_payout_address", self.farmer_target_encoded)
         if pool_target_encoded is not None:
             self.pool_target_encoded = pool_target_encoded
             self.pool_target = decode_puzzle_hash(pool_target_encoded)
