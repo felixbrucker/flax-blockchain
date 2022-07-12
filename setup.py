@@ -138,7 +138,7 @@ kwargs = dict(
         "flax.ssl": ["flax_ca.crt", "flax_ca.key", "dst_root_ca.pem"],
         "mozilla-ca": ["cacert.pem"],
     },
-    version="0.1.9+og-1.1.1",
+    version="0.1.9+og-1.2.0",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     zip_safe=False,
